@@ -20,6 +20,11 @@
 #define LED_PIN 5 // Pin 5 of GPIOA
 #define BUTTON_PIN 13 // Pin 13 of GPIOC
 
+#define BUTTON_IS_PRESSED()    (!(GPIOC->IDR & (1 << BUTTON_PIN)))
+#define BUTTON_IS_RELEASED()   (GPIOC->IDR & (1 << BUTTON_PIN))
+#define TOGGLE_LED()           (GPIOA->ODR ^= (1 << LED_PIN))
+
+volatile uint8_t button_pressed = 0; // Flag to indicate button press
 
 void configure_gpio_for_usart(void)
 {
@@ -50,12 +55,48 @@ void configure_gpio_for_usart(void)
 }
 
 
-void configure_gpio(void)
+void init_gpio_pin(GPIO_t *GPIOx, uint8_t pin, uint8_t mode)
 {
-
-    
+    GPIOx->MODER &= ~(0x3 << (pin * 2)); // Clear MODER bits for this pin
+    GPIOx->MODER |= (mode << (pin * 2)); // Set MODER bits for this pin
 }
 
+void configure_gpio(void)
+{
+    *RCC_AHB2ENR |= (1 << 0) | (1 << 2); // Enable clock for GPIOA and GPIOC
+
+    // Enable clock for SYSCFG
+    *RCC_APB2ENR |= (1 << 0); // RCC_APB2ENR_SYSCFGEN
+
+    // Configure SYSCFG EXTICR to map EXTI13 to PC13
+    SYSCFG->EXTICR[3] &= ~(0xF << 4); // Clear bits for EXTI13
+    SYSCFG->EXTICR[3] |= (0x2 << 4);  // Map EXTI13 to Port C
+
+    // Configure EXTI13 for falling edge trigger
+    EXTI->FTSR1 |= (1 << BUTTON_PIN);  // Enable falling trigger
+    EXTI->RTSR1 &= ~(1 << BUTTON_PIN); // Disable rising trigger
+
+    // Unmask EXTI13
+    EXTI->IMR1 |= (1 << BUTTON_PIN);
+
+    init_gpio_pin(GPIOA, LED_PIN, 0x1); // Set LED pin as output
+    init_gpio_pin(GPIOC, BUTTON_PIN, 0x0); // Set BUTTON pin as input
+
+    // Enable EXTI15_10 interrupt
+    *NVIC_ISER1 |= (1 << (EXTI15_10_IRQn - 32));
+
+    configure_gpio_for_usart();
+}
+
+uint8_t gpio_button_is_pressed(void)
+{
+    return BUTTON_IS_PRESSED();
+}
+
+void gpio_toggle_led(void)
+{
+    TOGGLE_LED();
+}
 // Emula el comprtamiento de la puerta
 void gpio_set_door_led_state(uint8_t state) {
     if (state) {
@@ -69,7 +110,6 @@ void gpio_toggle_heartbeat_led(void) {
     GPIOA->ODR ^= (1 << 5);
 }
 
-volatile uint8_t button_pressed = 0; // Flag to indicate button press
 uint8_t button_driver_get_event(void)
 {
     return button_pressed;

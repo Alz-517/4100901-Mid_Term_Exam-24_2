@@ -57,5 +57,10 @@ uint8_t button_driver_get_event(void);
 
 void configure_gpio_for_usart(void);
 
+void init_gpio_pin(GPIO_t *GPIOx, uint8_t pin, uint8_t mode);
+uint8_t gpio_button_is_pressed(void);
+void gpio_toggle_led(void);
+void EXTI15_10_IRQHandler(void);
+
 #endif // GPIO_H
 
